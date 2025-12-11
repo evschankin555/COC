@@ -38,7 +38,7 @@ def find_and_click_button(button_image_path: str, confidence: float = 0.8, regio
     try:
         # Проверяем существование файла
         if not os.path.exists(button_image_path):
-            print(f"⚠️  Файл изображения не найден: {button_image_path}")
+            print(f"[!] Файл изображения не найден: {button_image_path}")
             return False, None
         
         # Ищем кнопку на экране (только в указанной области)
@@ -54,7 +54,7 @@ def find_and_click_button(button_image_path: str, confidence: float = 0.8, regio
             center = pyautogui.center(location)
             x, y = center
             
-            print(f"✅ Кнопка найдена! Координаты: ({x}, {y})")
+            print(f"[OK] Кнопка найдена! Координаты: ({x}, {y})")
             
             # Сохраняем текущую позицию курсора
             original_pos = pyautogui.position()
@@ -66,7 +66,7 @@ def find_and_click_button(button_image_path: str, confidence: float = 0.8, regio
             # Возвращаем курсор точно на исходное место
             pyautogui.moveTo(original_pos.x, original_pos.y)
             
-            print(f"🖱️  Клик выполнен, курсор возвращен на ({original_pos.x}, {original_pos.y})")
+            print(f"[CLICK] Клик выполнен, курсор возвращен на ({original_pos.x}, {original_pos.y})")
             return True, (x, y)
         else:
             return False, None
@@ -74,21 +74,21 @@ def find_and_click_button(button_image_path: str, confidence: float = 0.8, regio
     except pyautogui.ImageNotFoundException:
         return False, None
     except Exception as e:
-        print(f"❌ Ошибка: {e}")
+        print(f"[ERROR] Ошибка: {e}")
         return False, None
 
 def main():
     """Основной цикл автокликера"""
-    print("🎮 Автокликер запущен!")
-    print(f"📸 Ищу кнопку: {BUTTON_IMAGE_PATH}")
-    print(f"⏱️  Интервал проверки: {CHECK_INTERVAL} сек")
-    print(f"🎯 Точность поиска: {CONFIDENCE * 100}%")
+    print("[START] Автокликер запущен!")
+    print(f"[INFO] Ищу кнопку: {BUTTON_IMAGE_PATH}")
+    print(f"[INFO] Интервал проверки: {CHECK_INTERVAL} сек")
+    print(f"[INFO] Точность поиска: {CONFIDENCE * 100}%")
     
     # Определяем область поиска (правая половина экрана)
     search_region = get_search_region()
     screen_width, screen_height = pyautogui.size()
-    print(f"🔍 Область поиска: правая половина экрана ({screen_width // 2}x{screen_height})")
-    print("\n💡 Нажмите Ctrl+C для остановки\n")
+    print(f"[INFO] Область поиска: правая половина экрана ({screen_width // 2}x{screen_height})")
+    print("\n[INFO] Нажмите Ctrl+C для остановки\n")
     
     click_count = 0
     
@@ -102,14 +102,14 @@ def main():
             
             if found:
                 click_count += 1
-                print(f"📊 Всего кликов: {click_count}\n")
+                print(f"[STATS] Всего кликов: {click_count}\n")
             
             # Небольшая задержка перед следующей проверкой
             time.sleep(CHECK_INTERVAL)
     
     except KeyboardInterrupt:
-        print(f"\n\n🛑 Автокликер остановлен")
-        print(f"📊 Всего выполнено кликов: {click_count}")
+        print(f"\n\n[STOP] Автокликер остановлен")
+        print(f"[STATS] Всего выполнено кликов: {click_count}")
 
 if __name__ == "__main__":
     main()
