@@ -9,6 +9,8 @@ from pathlib import Path
 # Настройки
 BUTTON_IMAGE_PATH = "btn.png"  # Путь к изображению первой кнопки
 BUTTON2_IMAGE_PATH = "btn2.png"  # Путь к изображению второй кнопки
+BUTTON3_IMAGE_PATH = "btn3.png"  # Триггер (картинка 3)
+BUTTON4_IMAGE_PATH = "btn4.png"  # Цель (картинка 4) — нажать, когда виден триггер
 CHECK_INTERVAL = 0.1  # Интервал проверки в секундах (0.1 = 100мс, очень быстро)
 CONFIDENCE = 0.8  # Точность поиска (0.8 = 80%, можно снизить до 0.7 если не находит)
 CLICK_DELAY = 0.01  # Минимальная задержка после клика для мгновенного возврата
@@ -142,11 +144,36 @@ def find_and_double_click_button(button_image_path: str, confidence: float = 0.8
         print(f"[ERROR] Ошибка: {e}")
         return False, None
 
+def is_image_visible(image_path: str, confidence: float = 0.8, region: tuple = None) -> bool:
+    """Проверяет, видна ли картинка на экране (в указанной области)."""
+    try:
+        if not os.path.exists(image_path):
+            print(f"[!] Файл изображения не найден: {image_path}")
+            return False
+
+        location = pyautogui.locateOnScreen(
+            image_path,
+            confidence=confidence,
+            region=region,
+            grayscale=False,
+        )
+        return location is not None
+    except pyautogui.ImageNotFoundException:
+        return False
+    except Exception as e:
+        print(f"[ERROR] Ошибка: {e}")
+        return False
+
+def click_target_image(target_image_path: str, confidence: float = 0.8, region: tuple = None):
+    """Ищет target-картинку и кликает по ней 1 раз, с возвратом курсора."""
+    return find_and_click_button(target_image_path, confidence=confidence, region=region)
+
 def main():
     """Основной цикл автокликера"""
     print("[START] Автокликер запущен!")
     print(f"[INFO] Ищу кнопку 1: {BUTTON_IMAGE_PATH}")
     print(f"[INFO] Ищу кнопку 2: {BUTTON2_IMAGE_PATH}")
+    print(f"[INFO] Триггер 3: {BUTTON3_IMAGE_PATH} -> нажать: {BUTTON4_IMAGE_PATH}")
     print(f"[INFO] Интервал проверки: {CHECK_INTERVAL} сек")
     print(f"[INFO] Точность поиска: {CONFIDENCE * 100}%")
     
@@ -158,6 +185,8 @@ def main():
     
     click_count_1 = 0  # Счетчик кликов для первой кнопки
     click_count_2 = 0  # Счетчик кликов для второй кнопки
+    click_count_4 = 0  # Счетчик кликов по картинке 4 (по триггеру 3)
+    trigger3_prev_visible = False  # чтобы нажимать btn4 только по появлению btn3
     
     try:
         while True:
@@ -182,6 +211,28 @@ def main():
             if found_2:
                 click_count_2 += 1
                 print(f"[STATS] Кнопка 2 - всего двойных кликов: {click_count_2}\n")
+
+            # Триггер: если появилась картинка 3 — нажать картинку 4 (один раз на появление)
+            trigger3_visible = is_image_visible(
+                BUTTON3_IMAGE_PATH,
+                CONFIDENCE,
+                region=search_region,
+            )
+
+            if trigger3_visible and not trigger3_prev_visible:
+                print("[INFO] Триггер 3 появился -> пытаюсь нажать кнопку 4")
+                found_4, _coords_4 = click_target_image(
+                    BUTTON4_IMAGE_PATH,
+                    CONFIDENCE,
+                    region=search_region,
+                )
+                if found_4:
+                    click_count_4 += 1
+                    print(f"[STATS] Кнопка 4 - всего кликов: {click_count_4}\n")
+                else:
+                    print("[INFO] Кнопка 4 не найдена, хотя триггер 3 виден")
+
+            trigger3_prev_visible = trigger3_visible
             
             # Небольшая задержка перед следующей проверкой
             time.sleep(CHECK_INTERVAL)
@@ -190,6 +241,7 @@ def main():
         print(f"\n\n[STOP] Автокликер остановлен")
         print(f"[STATS] Кнопка 1 - всего выполнено кликов: {click_count_1}")
         print(f"[STATS] Кнопка 2 - всего выполнено двойных кликов: {click_count_2}")
+        print(f"[STATS] Кнопка 4 - всего кликов (по триггеру 3): {click_count_4}")
 
 if __name__ == "__main__":
     main()
