@@ -64,3 +64,22 @@ temp/
 cache/
 *.tmp
 *.temp
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# PyInstaller
+*.spec
+build/
+dist/
+*.exe
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
