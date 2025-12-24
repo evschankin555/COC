@@ -4,7 +4,10 @@
 import pyautogui
 import time
 import os
+import threading
 from pathlib import Path
+from PIL import Image, ImageDraw
+import pystray
 
 # Настройки
 BUTTON_IMAGE_PATH = "btn.png"  # Путь к изображению первой кнопки
@@ -35,6 +38,28 @@ BTN5_FALLBACK_FULL_SCREEN = True
 
 # Безопасность: отключить fail-safe (чтобы не было проблем при движении мыши)
 pyautogui.FAILSAFE = False
+
+# Глобальные переменные для управления треем и автокликером
+is_running = False  # Флаг состояния автокликера (включен/выключен)
+tray_icon = None  # Ссылка на объект иконки трея
+autoclicker_thread = None  # Ссылка на поток с основным циклом
+
+def create_tray_icon(enabled: bool) -> Image.Image:
+    """Создает простую иконку для системного трея"""
+    # Создаем изображение 64x64 пикселей
+    image = Image.new('RGB', (64, 64), color='white')
+    draw = ImageDraw.Draw(image)
+    
+    # Выбираем цвет в зависимости от состояния
+    if enabled:
+        color = (0, 255, 0)  # Зеленый при включено
+    else:
+        color = (128, 128, 128)  # Серый при выключено
+    
+    # Рисуем круг
+    draw.ellipse([10, 10, 54, 54], fill=color, outline=(0, 0, 0), width=2)
+    
+    return image
 
 # Автоматическое определение области поиска (правая половина экрана)
 def get_search_region():
@@ -261,25 +286,13 @@ def run_btn9_sequence(confidence: float, region: tuple):
     print("[INFO] Последовательность 10 -> 11 -> 12 выполнена")
     return True
 
-def main():
-    """Основной цикл автокликера"""
-    print("[START] Автокликер запущен!")
-    print(f"[INFO] Ищу кнопку 1: {BUTTON_IMAGE_PATH}")
-    print(f"[INFO] Ищу кнопку 2: {BUTTON2_IMAGE_PATH}")
-    print(f"[INFO] Триггер 3: {BUTTON3_IMAGE_PATH} -> нажать: {BUTTON4_IMAGE_PATH}")
-    print(f"[INFO] Кнопка 5: {BUTTON5_IMAGE_PATH} (клик по появлению)")
-    print(f"[INFO] Кнопка 6: {BUTTON6_IMAGE_PATH} (клик по появлению)")
-    print(f"[INFO] Триггер 7 (весь экран): {BUTTON7_IMAGE_PATH} -> нажать: {BUTTON8_IMAGE_PATH}")
-    print(f"[INFO] Триггер 9: {BUTTON9_IMAGE_PATH} -> {BUTTON10_IMAGE_PATH} -> {BUTTON11_IMAGE_PATH} -> {BUTTON12_IMAGE_PATH}")
-    print(f"[INFO] Кнопка 13: {BUTTON13_IMAGE_PATH} (не чаще 1 раза в {BTN13_MIN_INTERVAL} сек)")
-    print(f"[INFO] Интервал проверки: {CHECK_INTERVAL} сек")
-    print(f"[INFO] Точность поиска: {CONFIDENCE * 100}%")
+def autoclicker_loop():
+    """Основной цикл автокликера, работает в отдельном потоке"""
+    global is_running
     
     # Определяем область поиска (правая половина экрана)
     search_region = get_search_region()
     screen_width, screen_height = pyautogui.size()
-    print(f"[INFO] Область поиска: правая половина экрана ({screen_width // 2}x{screen_height})")
-    print("\n[INFO] Нажмите Ctrl+C для остановки\n")
     
     click_count_1 = 0  # Счетчик кликов для первой кнопки
     click_count_2 = 0  # Счетчик кликов для второй кнопки
@@ -298,6 +311,11 @@ def main():
     
     try:
         while True:
+            # Проверяем флаг is_running перед выполнением действий
+            if not is_running:
+                time.sleep(CHECK_INTERVAL)
+                continue
+            
             # Проверяем первую кнопку (обычный клик)
             found_1, coords_1 = find_and_click_button(
                 BUTTON_IMAGE_PATH, 
@@ -442,16 +460,81 @@ def main():
             # Небольшая задержка перед следующей проверкой
             time.sleep(CHECK_INTERVAL)
     
-    except KeyboardInterrupt:
-        print(f"\n\n[STOP] Автокликер остановлен")
-        print(f"[STATS] Кнопка 1 - всего выполнено кликов: {click_count_1}")
-        print(f"[STATS] Кнопка 2 - всего выполнено двойных кликов: {click_count_2}")
-        print(f"[STATS] Кнопка 4 - всего кликов (по триггеру 3): {click_count_4}")
-        print(f"[STATS] Кнопка 5 - всего кликов: {click_count_5}")
-        print(f"[STATS] Кнопка 6 - всего кликов: {click_count_6}")
-        print(f"[STATS] Кнопка 8 - всего кликов (по триггеру 7): {click_count_8}")
-        print(f"[STATS] Последовательность по триггеру 9 - выполнено раз: {seq9_count}")
-        print(f"[STATS] Кнопка 13 - всего кликов: {click_count_13}")
+    except Exception as e:
+        print(f"[ERROR] Ошибка в цикле автокликера: {e}")
+
+def toggle_autoclicker(icon, item):
+    """Обработчик переключения состояния автокликера"""
+    global is_running, tray_icon
+    
+    is_running = not is_running
+    status = "включен" if is_running else "выключен"
+    print(f"[INFO] Автокликер {status}")
+    
+    # Обновляем иконку
+    icon.icon = create_tray_icon(is_running)
+    # Обновляем меню (текст обновится автоматически через callable функцию)
+    icon.update_menu()
+
+def quit_app(icon, item):
+    """Обработчик выхода из программы"""
+    global is_running, tray_icon, autoclicker_thread
+    
+    print("[INFO] Завершение работы...")
+    is_running = False
+    
+    # Останавливаем иконку трея
+    icon.stop()
+    
+    # Программа завершится автоматически, так как поток daemon
+
+def get_toggle_text():
+    """Возвращает текст для пункта меню переключения"""
+    return "Выключить" if is_running else "Включить"
+
+def setup_tray():
+    """Настраивает иконку трея с меню"""
+    global tray_icon
+    
+    # Создаем меню
+    menu = pystray.Menu(
+        pystray.MenuItem(get_toggle_text, toggle_autoclicker),
+        pystray.MenuItem("Выход", quit_app)
+    )
+    
+    # Создаем иконку (по умолчанию выключена)
+    icon_image = create_tray_icon(False)
+    tray_icon = pystray.Icon("autoclicker", icon_image, "Автокликер", menu)
+    
+    return tray_icon
+
+def main():
+    """Основная функция - запускает трей и поток автокликера"""
+    global autoclicker_thread, tray_icon
+    
+    print("[START] Автокликер запущен!")
+    print(f"[INFO] Ищу кнопку 1: {BUTTON_IMAGE_PATH}")
+    print(f"[INFO] Ищу кнопку 2: {BUTTON2_IMAGE_PATH}")
+    print(f"[INFO] Триггер 3: {BUTTON3_IMAGE_PATH} -> нажать: {BUTTON4_IMAGE_PATH}")
+    print(f"[INFO] Кнопка 5: {BUTTON5_IMAGE_PATH} (клик по появлению)")
+    print(f"[INFO] Кнопка 6: {BUTTON6_IMAGE_PATH} (клик по появлению)")
+    print(f"[INFO] Триггер 7 (весь экран): {BUTTON7_IMAGE_PATH} -> нажать: {BUTTON8_IMAGE_PATH}")
+    print(f"[INFO] Триггер 9: {BUTTON9_IMAGE_PATH} -> {BUTTON10_IMAGE_PATH} -> {BUTTON11_IMAGE_PATH} -> {BUTTON12_IMAGE_PATH}")
+    print(f"[INFO] Кнопка 13: {BUTTON13_IMAGE_PATH} (не чаще 1 раза в {BTN13_MIN_INTERVAL} сек)")
+    print(f"[INFO] Интервал проверки: {CHECK_INTERVAL} сек")
+    print(f"[INFO] Точность поиска: {CONFIDENCE * 100}%")
+    
+    screen_width, screen_height = pyautogui.size()
+    print(f"[INFO] Область поиска: правая половина экрана ({screen_width // 2}x{screen_height})")
+    print("\n[INFO] Программа работает в системном трее. Кликните правой кнопкой по иконке для управления.\n")
+    
+    # Запускаем поток с основным циклом автокликера
+    autoclicker_thread = threading.Thread(target=autoclicker_loop, daemon=True)
+    autoclicker_thread.start()
+    
+    # Настраиваем и запускаем трей
+    icon = setup_tray()
+    icon.run()  # Блокирующий вызов - программа будет работать пока не закроют трей
 
 if __name__ == "__main__":
     main()
