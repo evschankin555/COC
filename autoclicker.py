@@ -488,7 +488,7 @@ def quit_app(icon, item):
     
     # Программа завершится автоматически, так как поток daemon
 
-def get_toggle_text():
+def get_toggle_text(item):
     """Возвращает текст для пункта меню переключения"""
     return "Выключить" if is_running else "Включить"
 
